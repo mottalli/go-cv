@@ -180,6 +180,20 @@ func (img *Image) Clone() (res *Image) {
 	return
 }
 
+/******* LUT *******/
+type LUT [][256]uint8
+func (img *Image) LUTTo(res *Image, lut *LUT) {
+	res.InitializeAs(img)
+	
+	cvlut := CreateImage(Size{256, 1}, img.Depth, 1)
+	defer cvlut.Release()
+	for i := 0; i < 256; i++ {
+		C.cvSetReal2D(cvlut.ptr, C.int(0), C.int(i), C.double((*lut)[0][i]))
+	}
+	
+	C.cvLUT(img.ptr, res.ptr, cvlut.ptr)
+}
+
 /******* CvtColor *******/
 /*func (img *Image) CvtColorTo(dest *Image) {
 	dest.InitializeAs(img)\
