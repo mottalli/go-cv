@@ -24,27 +24,32 @@ type Size struct {
 
 type Image struct {
 	// Private attributes
-	iplImage    *C.IplImage
-	ptr         unsafe.Pointer
-	colorModel  color.Model
-	initialized bool
+	iplImage   *C.IplImage
+	ptr        unsafe.Pointer
+	colorModel color.Model
 
 	// Exported attributes
-	Size     Size
-	Data     unsafe.Pointer
-	Step     int
-	Channels int
-	Depth    int
+	Size        Size
+	Data        unsafe.Pointer
+	Step        int
+	Channels    int
+	Depth       int
+	Initialized bool
 }
 
 func (img *Image) Release() {
 	if img.iplImage != nil {
 		C.cvReleaseImage(&img.iplImage)
 	}
+
+	img.ptr = nil
+	img.Initialized = false
 }
 
+/******* Image initialization methods *******/
+
 func (img *Image) InitializeAs(other *Image) *Image {
-	if img.initialized && (img.Size == other.Size) && (img.Channels == other.Channels) && (img.Depth == other.Depth) {
+	if img.Initialized && (img.Size == other.Size) && (img.Channels == other.Channels) && (img.Depth == other.Depth) {
 		// Do nothing if they are of the same size and type
 		return img
 	}
@@ -59,7 +64,7 @@ func ImageFromIplImage(iplImage *C.IplImage) (*Image, error) {
 	image := new(Image)
 	image.ptr = unsafe.Pointer(iplImage)
 	image.iplImage = iplImage
-	image.initialized = true
+	image.Initialized = true
 
 	size := C.cvGetSize(image.ptr)
 	image.Size = Size{int(size.width), int(size.height)}
@@ -83,7 +88,6 @@ func ImageFromIplImage(iplImage *C.IplImage) (*Image, error) {
 	return image, nil
 }
 
-/******* CreateImage *******/
 const (
 	CV_8U        = C.CV_8U
 	CV_8S        = C.CV_8S
@@ -97,21 +101,33 @@ const (
 func CreateImage(size Size, depth int, nChannels int) (image *Image) {
 	iplImage := C.cvCreateImage(C.CvSize{C.int(size.Width), C.int(size.Height)}, C.int(depth), C.int(nChannels))
 	image, _ = ImageFromIplImage(iplImage)
-	image.initialized = true
+	image.Initialized = true
 	return
+}
+
+func (img *Image) Initialize(size Size, depth int, nChannels int) {
+	if img.Initialized && img.Size == size && img.Depth == depth && img.Channels == nChannels {
+		return
+	}
+
+	if img.Initialized {
+		img.Release()
+	}
+
+	*img = *CreateImage(size, depth, nChannels)
 }
 
 func NewImage() (image *Image) {
 	image = new(Image)
-	image.initialized = false
+	image.Initialized = false
 	image.Channels = 0
 	image.Size = Size{0, 0}
 	return
 }
 
 func (image *Image) checkInitialized() {
-	if !image.initialized {
-		panic("Tried to process non-initialized image")
+	if !image.Initialized {
+		panic("Tried to process non-Initialized image")
 	}
 }
 
@@ -127,7 +143,7 @@ const (
 )
 
 func (img *Image) ResizeTo(dest *Image, size Size, interp InterpolationType) {
-	if !dest.initialized || dest.Size != size || dest.Channels != img.Channels || dest.Channels != img.Channels {
+	if !dest.Initialized || dest.Size != size || dest.Channels != img.Channels || dest.Channels != img.Channels {
 		dest.Release()
 		*dest = *CreateImage(size, img.Depth, img.Channels)
 	}
@@ -160,11 +176,14 @@ func (img *Image) Rotate(angle float64) (res *Image) {
 }
 
 /******* Blur *******/
+func (img *Image) GaussianBlurTo(dest *Image, radius int) {
+	dest.InitializeAs(img)
+	C.cvSmooth(img.ptr, dest.ptr, C.CV_GAUSSIAN, C.int(radius), C.int(radius), C.double(0.0), C.double(0.0))
+}
+
 func (img *Image) GaussianBlur(radius int) (res *Image) {
 	res = new(Image)
-	res.InitializeAs(img)
-
-	C.cvSmooth(img.ptr, res.ptr, C.CV_GAUSSIAN, C.int(radius), C.int(radius), C.double(0.0), C.double(0.0))
+	img.GaussianBlurTo(res, radius)
 
 	return
 }
@@ -182,22 +201,62 @@ func (img *Image) Clone() (res *Image) {
 
 /******* LUT *******/
 type LUT [][256]uint8
+
 func (img *Image) LUTTo(res *Image, lut *LUT) {
 	res.InitializeAs(img)
-	
+
 	cvlut := CreateImage(Size{256, 1}, img.Depth, 1)
 	defer cvlut.Release()
 	for i := 0; i < 256; i++ {
 		C.cvSetReal2D(cvlut.ptr, C.int(0), C.int(i), C.double((*lut)[0][i]))
 	}
-	
+
 	C.cvLUT(img.ptr, res.ptr, cvlut.ptr)
 }
 
+/******* Split *******/
+type Channels []Image
+
+func (channels *Channels) Release() {
+	for _, channel := range *channels {
+		channel.Release()
+	}
+}
+
+func (img *Image) SplitTo(channels *Channels) error {
+	img.checkInitialized()
+
+	n := img.Channels
+
+	if n != len(*channels) {
+		return errors.New("Trying to split image to wrong number of channels")
+	}
+
+	if n == 1 {
+		C.cvSplit(img.ptr, (*channels)[0].ptr, nil, nil, nil)
+	} else if n == 2 {
+		C.cvSplit(img.ptr, (*channels)[0].ptr, (*channels)[1].ptr, nil, nil)
+	} else if n == 3 {
+		C.cvSplit(img.ptr, (*channels)[0].ptr, (*channels)[1].ptr, (*channels)[2].ptr, nil)
+	}
+
+	return nil
+}
+
+func (img *Image) Split() (channels Channels) {
+	img.checkInitialized()
+	channels = make(Channels, img.Channels)
+
+	for i := 0; i < img.Channels; i++ {
+		channels[i].Initialize(img.Size, img.Depth, 1)
+	}
+
+	img.SplitTo(&channels)
+
+	return
+}
+
 /******* CvtColor *******/
-/*func (img *Image) CvtColorTo(dest *Image) {
-	dest.InitializeAs(img)\
-}*/
 
 /************************************************
  * Implementation of Go's Image interface

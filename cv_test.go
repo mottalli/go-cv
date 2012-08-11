@@ -9,7 +9,7 @@ import (
 func TestColor(t *testing.T) {
 	image, _ := LoadImage(imagePath, true)
 	defer image.Release()
-	
+
 	r, g, b, a := image.At(30, 20).RGBA()
 
 	var er, eg, eb, ea uint32
@@ -35,7 +35,7 @@ func TestColor(t *testing.T) {
 func TestGray(t *testing.T) {
 	image, _ := LoadImage(imagePath, false)
 	defer image.Release()
-	
+
 	r, g, b, a := image.At(100, 100).RGBA()
 
 	if r != g || g != b {
@@ -49,10 +49,69 @@ func TestGray(t *testing.T) {
 
 func TestResize(t *testing.T) {
 	image, _ := LoadImage(imagePath, true)
+	defer image.Release()
 	resized := image.Resize(Size{320, 200}, INTER_NN)
+	defer resized.Release()
 
 	if resized.Size.Width != 320 || resized.Size.Height != 200 {
 		t.Error("Resized image is not 320x200 pixels")
+	}
+}
+
+func TestInitialize(t *testing.T) {
+	img := NewImage()
+	defer img.Release()
+
+	if img.Initialized {
+		t.Error("Empty image is initialized")
+	}
+
+	img.Initialize(Size{320, 200}, IPL_DEPTH_8U, 3)
+
+	if !img.Initialized {
+		t.Error("Initialized image not marked as initialized, or image was not initialized successfully")
+	}
+
+	if img.Size.Width != 320 || img.Size.Height != 200 {
+		t.Error("Wrong image size while intialising")
+	}
+
+	if img.Depth != IPL_DEPTH_8U {
+		t.Error("Wrong image depth while initialising")
+	}
+
+	if img.Channels != 3 {
+		t.Error("Wrong number of channels while initialising")
+	}
+}
+
+func TestReinitialize(t *testing.T) {
+	img := NewImage()
+	defer img.Release()
+
+	img.Initialize(Size{10, 20}, IPL_DEPTH_8U, 1)
+	// Initialize again with different parameters
+	img.Initialize(Size{30, 40}, IPL_DEPTH_8U, 3)
+
+	if img.Size.Width != 30 || img.Size.Height != 40 || img.Depth != IPL_DEPTH_8U || img.Channels != 3 {
+		t.Error("Invalid format when re-initialising image")
+	}
+}
+
+func TestSplit(t *testing.T) {
+	image, _ := LoadImage(imagePath, true)
+	defer image.Release()
+
+	channels := image.Split()
+	defer channels.Release()
+
+	if len(channels) != 3 {
+		t.Error("Could not split image into 3 channels")
+	}
+
+	err := image.SplitTo(&channels)
+	if err != nil {
+		t.Error("Error while splitting image into existing channel list")
 	}
 }
 
