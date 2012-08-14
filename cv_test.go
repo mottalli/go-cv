@@ -50,10 +50,12 @@ func TestGray(t *testing.T) {
 func TestResize(t *testing.T) {
 	image, _ := LoadImage(imagePath, true)
 	defer image.Release()
-	resized := image.Resize(Size{320, 200}, INTER_NN)
+
+	newsize := Size{320, 200}
+	resized := image.Resize(newsize, INTER_NN)
 	defer resized.Release()
 
-	if resized.Size.Width != 320 || resized.Size.Height != 200 {
+	if resized.Size() != newsize {
 		t.Error("Resized image is not 320x200 pixels")
 	}
 }
@@ -66,22 +68,20 @@ func TestInitialize(t *testing.T) {
 		t.Error("Empty image is initialized")
 	}
 
-	img.Initialize(Size{320, 200}, IPL_DEPTH_8U, 3)
+	size := Size{320, 200}
+
+	img.Initialize(size, CV_8UC3)
 
 	if !img.Initialized {
 		t.Error("Initialized image not marked as initialized, or image was not initialized successfully")
 	}
 
-	if img.Size.Width != 320 || img.Size.Height != 200 {
+	if img.Size() != size {
 		t.Error("Wrong image size while intialising")
 	}
 
-	if img.Depth != IPL_DEPTH_8U {
-		t.Error("Wrong image depth while initialising")
-	}
-
-	if img.Channels != 3 {
-		t.Error("Wrong number of channels while initialising")
+	if img.Type() != CV_8UC3 {
+		t.Error("Wrong image type while initialising")
 	}
 }
 
@@ -89,11 +89,11 @@ func TestReinitialize(t *testing.T) {
 	img := NewImage()
 	defer img.Release()
 
-	img.Initialize(Size{10, 20}, IPL_DEPTH_8U, 1)
+	img.Initialize(Size{10, 20}, CV_8UC1)
 	// Initialize again with different parameters
-	img.Initialize(Size{30, 40}, IPL_DEPTH_8U, 3)
+	img.Initialize(Size{30, 40}, CV_8UC3)
 
-	if img.Size.Width != 30 || img.Size.Height != 40 || img.Depth != IPL_DEPTH_8U || img.Channels != 3 {
+	if img.Size().Width != 30 || img.Size().Height != 40 || img.Type() != CV_8UC3 {
 		t.Error("Invalid format when re-initialising image")
 	}
 }
