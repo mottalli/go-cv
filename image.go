@@ -15,6 +15,53 @@ import (
 	"unsafe"
 )
 
+/**************************************************
+ * Implementation of the IplImage structure
+ **************************************************/
+type Image struct {
+	// Private attributes
+	iplImage   *C.IplImage
+	ptr        unsafe.Pointer
+	colorModel color.Model
+	imtype     MatType
+	size       Size
+
+	// Exported attributes
+	Initialized bool
+}
+
+func (img *Image) ScalarAt(pos ...int) Scalar {
+	n := len(pos)
+	var s C.CvScalar
+	if n == 1 {
+		s = C.cvGet1D(img.ptr, C.int(pos[0]))
+	} else if n == 2 {
+		s = C.cvGet2D(img.ptr, C.int(pos[0]), C.int(pos[1]))
+	} else if n == 3 {
+		s = C.cvGet3D(img.ptr, C.int(pos[0]), C.int(pos[1]), C.int(pos[2]))
+	}
+
+	return Scalar{float64(s.val[0]), float64(s.val[1]), float64(s.val[2]), float64(s.val[3])}
+}
+
+func (img *Image) Release() {
+	if img.iplImage != nil {
+		C.cvReleaseImage(&img.iplImage)
+		img.ptr = nil
+		img.iplImage = nil
+	}
+
+	img.Initialized = false
+}
+
+func (img *Image) Size() Size {
+	return img.size
+}
+
+func (img *Image) Type() MatType {
+	return img.imtype
+}
+
 /******* Image initialization methods *******/
 
 func (img *Image) InitializeAs(other *Image) *Image {
@@ -29,48 +76,6 @@ func (img *Image) InitializeAs(other *Image) *Image {
 	return img
 }
 
-func depthFromType(matType MatType, imageType bool) C.int {
-	if matType.Depth == 8 && matType.ElemType == Unsigned {
-		if imageType {
-			return C.IPL_DEPTH_8U
-		}
-	}
-	panic("TODO: depthFromType - implement this!")
-	return C.int(0)
-}
-
-func typeFromDepthAndChannels(depth, channels C.int) MatType {
-	if depth == C.IPL_DEPTH_8U && channels == 1 {
-		return CV_8UC1
-	} else if depth == C.IPL_DEPTH_8U && channels == 3 {
-		return CV_8UC3
-	}
-
-	panic("TODO: typeFromDepthAndChannels - implement this!")
-	return CV_8UC1
-}
-
-func ImageFromIplImage(iplImage *C.IplImage) (*Image, error) {
-	image := new(Image)
-	image.ptr = unsafe.Pointer(iplImage)
-	image.iplImage = iplImage
-	image.Initialized = true
-
-	size := C.cvGetSize(image.ptr)
-	image.size = Size{int(size.width), int(size.height)}
-	image.imtype = typeFromDepthAndChannels(iplImage.depth, iplImage.nChannels)
-
-	if image.imtype.NumChannels == 1 {
-		image.colorModel = color.GrayModel
-	} else if image.imtype.NumChannels == 3 {
-		image.colorModel = color.RGBAModel
-	} else {
-		panic("Unsupported image type - Unsupported number of channels")
-	}
-
-	return image, nil
-}
-
 func CreateImage(size Size, imtype MatType) (image *Image) {
 	var iplImage *C.IplImage
 
@@ -78,7 +83,7 @@ func CreateImage(size Size, imtype MatType) (image *Image) {
 		iplImage = C.cvCreateImage(C.CvSize{C.int(size.Width), C.int(size.Height)}, C.IPL_DEPTH_8U, C.int(imtype.NumChannels))
 	}
 
-	image, _ = ImageFromIplImage(iplImage)
+	image, _ = imageFromIplImage(iplImage)
 	return
 }
 
@@ -171,7 +176,7 @@ func (img *Image) CopyTo(dest *Image) {
 }
 
 func (img *Image) Clone() (res *Image) {
-	res, _ = ImageFromIplImage(C.cvCloneImage(img.iplImage))
+	res, _ = imageFromIplImage(C.cvCloneImage(img.iplImage))
 	return
 }
 

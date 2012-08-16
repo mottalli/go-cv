@@ -8,8 +8,7 @@ package cv
 */
 import "C"
 import (
-	"image/color"
-	"unsafe"
+//"unsafe"
 )
 
 /************************************************
@@ -68,62 +67,3 @@ var (
 	CV_64FC3 MatType = MatType{64, Float, 3}
 	CV_64FC4 MatType = MatType{64, Float, 4}
 )
-
-type Mat interface {
-	NativePointer() unsafe.Pointer
-	Release()
-	ScalarAt(pos ...int) Scalar
-	Size() Size
-	Type() MatType
-}
-
-/**************************************************
- * Implementation of the IplImage structure
- **************************************************/
-type Image struct {
-	// Private attributes
-	iplImage   *C.IplImage
-	ptr        unsafe.Pointer
-	colorModel color.Model
-	imtype     MatType
-	size       Size
-
-	// Exported attributes
-	Initialized bool
-}
-
-func (img *Image) NativePointer() unsafe.Pointer {
-	return img.ptr
-}
-
-func (img *Image) ScalarAt(pos ...int) Scalar {
-	n := len(pos)
-	var s C.CvScalar
-	if n == 1 {
-		s = C.cvGet1D(img.ptr, C.int(pos[0]))
-	} else if n == 2 {
-		s = C.cvGet2D(img.ptr, C.int(pos[0]), C.int(pos[1]))
-	} else if n == 3 {
-		s = C.cvGet3D(img.ptr, C.int(pos[0]), C.int(pos[1]), C.int(pos[2]))
-	}
-
-	return Scalar{float64(s.val[0]), float64(s.val[1]), float64(s.val[2]), float64(s.val[3])}
-}
-
-func (img *Image) Release() {
-	if img.iplImage != nil {
-		C.cvReleaseImage(&img.iplImage)
-		img.ptr = nil
-		img.iplImage = nil
-	}
-
-	img.Initialized = false
-}
-
-func (img *Image) Size() Size {
-	return img.size
-}
-
-func (img *Image) Type() MatType {
-	return img.imtype
-}

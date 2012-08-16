@@ -20,7 +20,7 @@ func LoadImage(filename string, loadColor bool) (*Image, error) {
 		if iplgray == nil {
 			return nil, errors.New("Could not open file: " + filename)
 		}
-		return ImageFromIplImage(iplgray)
+		return imageFromIplImage(iplgray)
 	}
 
 	iplbgr := C.cvLoadImage(cname, C.int(1))
@@ -28,7 +28,7 @@ func LoadImage(filename string, loadColor bool) (*Image, error) {
 		return nil, errors.New("Could not open file: " + filename)
 	}
 
-	bgr, _ := ImageFromIplImage(iplbgr)
+	bgr, _ := imageFromIplImage(iplbgr)
 	defer bgr.Release()
 
 	rgb := new(Image).InitializeAs(bgr)
@@ -47,4 +47,29 @@ func Show(image *Image, windowName string) {
 func WaitKey(miliseconds int) rune {
 	key := C.cvWaitKey(C.int(miliseconds))
 	return rune(key)
+}
+
+/**************************************************
+ * Video capture
+ **************************************************/
+
+type Capture struct {
+	handler *C.CvCapture
+}
+
+func CaptureFromCam(device int) (cap Capture, err error) {
+	cap.handler = C.cvCaptureFromCAM(C.int(device))
+	if cap.handler == nil {
+		err = errors.New("Could not open capture device")
+	}
+	return
+}
+
+func (cap *Capture) QueryFrame() (*Image, error) {
+	iplImage := C.cvQueryFrame(cap.handler)
+	return imageFromIplImage(iplImage)
+}
+
+func (cap *Capture) Close() {
+	C.cvReleaseCapture(&cap.handler)
 }
